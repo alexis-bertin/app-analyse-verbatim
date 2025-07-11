@@ -140,6 +140,9 @@ export default function Home() {
   const [dragActive, setDragActive] = useState(false)
   const [trainingData, setTrainingData] = useState<any[]>([])
   const [isTrainingMode, setIsTrainingMode] = useState(false)
+  const [isWordSelectionMode, setIsWordSelectionMode] = useState(false)
+  const [selectedWords, setSelectedWords] = useState<string[]>([])
+  const [showWordTrainingPanel, setShowWordTrainingPanel] = useState(false)
   
   // États pour les filtres
   const [selectedSentiment, setSelectedSentiment] = useState<string>('all')
@@ -292,6 +295,71 @@ export default function Home() {
         setTrainingData(data)
         setIsTrainingMode(true)
       }
+    })
+  }
+
+  // Fonction pour sélectionner un mot
+  const selectWord = (word: string) => {
+    if (isWordSelectionMode) {
+      setSelectedWords(prev => [...prev, word])
+    }
+  }
+
+  // Fonction pour ajouter des mots aux listes d'entraînement
+  const addWordsToTraining = (type: 'positive' | 'negative') => {
+    if (selectedWords.length === 0) return
+
+    const newWords = selectedWords.filter(word => 
+      !TRAINING_DATA.positiveKeywords.includes(word) && 
+      !TRAINING_DATA.negativeKeywords.includes(word)
+    )
+
+    if (type === 'positive') {
+      TRAINING_DATA.positiveKeywords.push(...newWords)
+    } else {
+      TRAINING_DATA.negativeKeywords.push(...newWords)
+    }
+
+    setSelectedWords([])
+    setShowWordTrainingPanel(false)
+    
+    // Re-analyser les verbatims avec les nouveaux mots
+    if (analysisResult) {
+      const texts = analysisResult.verbatims.map(v => v.text)
+      processVerbatims(texts)
+    }
+  }
+
+  // Fonction pour rendre un texte cliquable
+  const renderClickableText = (text: string) => {
+    if (!isWordSelectionMode) return text
+
+    const words = text.split(/\s+/)
+    return words.map((word, index) => {
+      const cleanWord = word.replace(/[^\w]/g, '').toLowerCase()
+      const isSelected = selectedWords.includes(cleanWord)
+      const isPositive = TRAINING_DATA.positiveKeywords.includes(cleanWord)
+      const isNegative = TRAINING_DATA.negativeKeywords.includes(cleanWord)
+      
+      if (cleanWord.length < 3 || STOP_WORDS.includes(cleanWord)) {
+        return <span key={index}>{word} </span>
+      }
+
+      let bgColor = 'bg-gray-100'
+      if (isSelected) bgColor = 'bg-yellow-200'
+      else if (isPositive) bgColor = 'bg-green-100'
+      else if (isNegative) bgColor = 'bg-red-100'
+
+      return (
+        <span
+          key={index}
+          className={`cursor-pointer hover:bg-blue-200 px-1 rounded ${bgColor} ${isSelected ? 'ring-2 ring-yellow-400' : ''}`}
+          onClick={() => selectWord(cleanWord)}
+          title={`${isPositive ? 'Mot positif' : isNegative ? 'Mot négatif' : 'Cliquer pour sélectionner'}`}
+        >
+          {word}{' '}
+        </span>
+      )
     })
   }
 
@@ -466,9 +534,13 @@ export default function Home() {
           </p>
           <div className="mt-4 flex justify-center space-x-4">
             <button
-              onClick={() => setIsTrainingMode(false)}
+              onClick={() => {
+                setIsTrainingMode(false)
+                setIsWordSelectionMode(false)
+                setShowWordTrainingPanel(false)
+              }}
               className={`px-4 py-2 rounded-md transition-colors ${
-                !isTrainingMode 
+                !isTrainingMode && !isWordSelectionMode
                   ? 'bg-blue-500 text-white' 
                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
               }`}
@@ -476,7 +548,11 @@ export default function Home() {
               Mode Analyse
             </button>
             <button
-              onClick={() => setIsTrainingMode(true)}
+              onClick={() => {
+                setIsTrainingMode(true)
+                setIsWordSelectionMode(false)
+                setShowWordTrainingPanel(false)
+              }}
               className={`px-4 py-2 rounded-md transition-colors flex items-center ${
                 isTrainingMode 
                   ? 'bg-green-500 text-white' 
@@ -486,10 +562,25 @@ export default function Home() {
               <Brain className="mr-2 h-4 w-4" />
               Mode Entraînement
             </button>
+            <button
+              onClick={() => {
+                setIsWordSelectionMode(!isWordSelectionMode)
+                setIsTrainingMode(false)
+                setShowWordTrainingPanel(false)
+              }}
+              className={`px-4 py-2 rounded-md transition-colors flex items-center ${
+                isWordSelectionMode 
+                  ? 'bg-purple-500 text-white' 
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              <Tag className="mr-2 h-4 w-4" />
+              Mode Sélection Mots
+            </button>
           </div>
         </div>
 
-        {!analysisResult && !isTrainingMode ? (
+        {!analysisResult && !isTrainingMode && !isWordSelectionMode ? (
           <div className="max-w-4xl mx-auto">
             <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
               <h2 className="text-2xl font-semibold mb-4 flex items-center">
@@ -560,6 +651,120 @@ export default function Home() {
                 <p className="text-gray-600">Analyse en cours...</p>
               </div>
             )}
+          </div>
+        ) : isWordSelectionMode ? (
+          <div className="max-w-4xl mx-auto">
+            <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+              <h2 className="text-2xl font-semibold mb-4 flex items-center">
+                <Tag className="mr-2" />
+                Mode Sélection de Mots - Affinage de l'Algorithme
+              </h2>
+              <p className="text-gray-600 mb-6">
+                Activez ce mode pour sélectionner des mots dans les verbatims et les ajouter aux listes de mots-clés positifs ou négatifs.
+                Cliquez sur les mots dans les verbatims pour les sélectionner, puis utilisez le panneau d'entraînement.
+              </p>
+              
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
+                <h3 className="text-lg font-medium text-purple-800 mb-2">Instructions</h3>
+                <div className="text-sm text-purple-700 space-y-1">
+                  <p>• <strong>Mots verts</strong> : Déjà dans la liste des mots positifs</p>
+                  <p>• <strong>Mots rouges</strong> : Déjà dans la liste des mots négatifs</p>
+                  <p>• <strong>Mots gris</strong> : Cliquez pour les sélectionner</p>
+                  <p>• <strong>Mots jaunes</strong> : Mots sélectionnés en attente</p>
+                </div>
+              </div>
+
+              {analysisResult && (
+                <div className="bg-white rounded-lg shadow-lg p-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-semibold">Verbatims avec Sélection de Mots</h3>
+                    <button
+                      onClick={() => setShowWordTrainingPanel(!showWordTrainingPanel)}
+                      className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-md flex items-center"
+                    >
+                      <Brain className="mr-2 h-4 w-4" />
+                      {showWordTrainingPanel ? 'Masquer' : 'Afficher'} Panneau d'Entraînement
+                    </button>
+                  </div>
+
+                  {showWordTrainingPanel && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                      <h4 className="text-sm font-semibold text-yellow-800 mb-2">Mots Sélectionnés ({selectedWords.length})</h4>
+                      {selectedWords.length > 0 ? (
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {selectedWords.map((word, index) => (
+                            <span key={index} className="bg-yellow-200 text-yellow-800 px-2 py-1 rounded text-sm">
+                              {word}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-yellow-700 text-sm">Aucun mot sélectionné. Cliquez sur les mots dans les verbatims ci-dessous.</p>
+                      )}
+                      
+                      {selectedWords.length > 0 && (
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => addWordsToTraining('positive')}
+                            className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm"
+                          >
+                            ➕ Ajouter aux Mots Positifs
+                          </button>
+                          <button
+                            onClick={() => addWordsToTraining('negative')}
+                            className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm"
+                          >
+                            ➕ Ajouter aux Mots Négatifs
+                          </button>
+                          <button
+                            onClick={() => setSelectedWords([])}
+                            className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm"
+                          >
+                            🗑️ Effacer Sélection
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full table-auto">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left p-2">Verbatim</th>
+                          <th className="text-left p-2">Sentiment</th>
+                          <th className="text-left p-2">Thématique</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredVerbatims.map((verbatim) => (
+                          <tr key={verbatim.id} className="border-b hover:bg-gray-50">
+                            <td className="p-2 max-w-md">
+                              {renderClickableText(verbatim.text)}
+                            </td>
+                            <td className="p-2">
+                              <span
+                                className={`px-2 py-1 rounded-full text-xs font-medium text-white ${
+                                  verbatim.sentiment === 'positif' ? 'bg-green-500' :
+                                  verbatim.sentiment === 'négatif' ? 'bg-red-500' : 'bg-gray-500'
+                                }`}
+                              >
+                                {verbatim.sentiment}
+                              </span>
+                            </td>
+                            <td className="p-2">
+                              <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                {THEME_DISPLAY_NAMES[verbatim.thematique as keyof typeof THEME_DISPLAY_NAMES] || verbatim.thematique}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         ) : isTrainingMode ? (
           <div className="max-w-4xl mx-auto">
