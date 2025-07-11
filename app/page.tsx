@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Upload, FileText, BarChart3, PieChart, Download, Loader2 } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { Upload, FileText, BarChart3, PieChart, Download, Loader2, Filter, Tag, Brain, Database } from 'lucide-react'
 import Papa from 'papaparse'
 import { PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts'
 
@@ -16,6 +16,92 @@ interface AnalysisResult {
   verbatims: Verbatim[]
   sentimentStats: { name: string; value: number; color: string }[]
   themeStats: { name: string; value: number }[]
+  keywords: { word: string; count: number }[]
+}
+
+// Mapping des thématiques avec des noms d'affichage sympas
+const THEME_DISPLAY_NAMES = {
+  'prise_en_charge': '🩺 Prise en Charge',
+  'accueil': '👋 Accueil & Réception',
+  'prestation_hoteliere': '🏨 Confort & Logement',
+  'sortie': '🚪 Sortie & Suivi',
+  'RAS': '✅ Rien à Signaler'
+}
+
+// Données d'entraînement basées sur les fichiers CSV
+const TRAINING_DATA = {
+  positiveKeywords: [
+    'bon', 'bien', 'excellent', 'parfait', 'satisfait', 'content', 'merci', 'super', 'génial', 'agréable', 
+    'efficace', 'rapide', 'professionnel', 'gentil', 'sympathique', 'compétent', 'rassurant', 'écoute',
+    'disponible', 'attentif', 'bienveillant', 'empathie', 'humain', 'respectueux', 'chaleureux',
+    'professionnalisme', 'qualité', 'recommandation', 'remerciement', 'bravo', 'formidable', 'extraordinaire',
+    'magnifique', 'remarquable', 'irréprochable', 'parfaitement', 'excellente', 'très bien', 'très bon',
+    'très satisfait', 'très content', 'très agréable', 'très professionnel', 'très gentil', 'très sympathique',
+    'très compétent', 'très rassurant', 'très à l\'écoute', 'très disponible', 'très attentif', 'très bienveillant',
+    'très empathique', 'très humain', 'très respectueux', 'très chaleureux', 'très professionnel', 'très qualifié',
+    'très recommandé', 'très remercié', 'très bravo', 'très formidable', 'très extraordinaire', 'très magnifique',
+    'très remarquable', 'très irréprochable', 'très parfaitement', 'très excellente'
+  ],
+  negativeKeywords: [
+    'mauvais', 'mal', 'horrible', 'nul', 'décevant', 'mécontent', 'problème', 'lent', 'désagréable', 
+    'incompétent', 'erreur', 'retard', 'attente', 'long', 'difficile', 'douloureux', 'douleur', 'souffrance',
+    'inconfort', 'stress', 'angoisse', 'inquiétude', 'peur', 'crainte', 'déception', 'frustration',
+    'colère', 'irritation', 'agacement', 'énervement', 'exaspération', 'exaspéré', 'énervé', 'irrité',
+    'agacé', 'frustré', 'déçu', 'inquiet', 'angoissé', 'stressé', 'douloureux', 'souffrant', 'inconfortable',
+    'mal à l\'aise', 'gêné', 'embarrassé', 'humilié', 'déshonoré', 'méprisé', 'ignoré', 'négligé',
+    'abandonné', 'laissé', 'oublié', 'négligé', 'délaissé', 'délaissé', 'abandonné', 'laissé pour compte',
+    'mal traité', 'mal soigné', 'mal accueilli', 'mal informé', 'mal expliqué', 'mal rassuré', 'mal écouté',
+    'mal compris', 'mal pris en charge', 'mal organisé', 'mal coordonné', 'mal géré', 'mal administré'
+  ],
+  themes: {
+    'prise_en_charge': [
+      'prise en charge', 'soins', 'soignant', 'infirmier', 'infirmière', 'médecin', 'docteur', 'chirurgien',
+      'anesthésiste', 'professionnel', 'équipe', 'personnel', 'compétence', 'professionnalisme', 'qualité',
+      'efficacité', 'disponibilité', 'écoute', 'attention', 'bienveillance', 'empathie', 'humanité',
+      'respect', 'dignité', 'confidentialité', 'consentement', 'droits', 'patient', 'malade', 'santé',
+      'médical', 'paramédical', 'soins infirmiers', 'soins médicaux', 'traitement', 'intervention',
+      'opération', 'chirurgie', 'anesthésie', 'récupération', 'rétablissement', 'guérison', 'amélioration'
+    ],
+    'accueil': [
+      'accueil', 'réception', 'admission', 'entrée', 'arrivée', 'première impression', 'circuit',
+      'administratif', 'secrétariat', 'secrétaire', 'guichet', 'accueil administratif', 'accueil médical',
+      'accueil soignant', 'accueil infirmier', 'accueil médecin', 'accueil chirurgien', 'accueil anesthésiste',
+      'accueil personnel', 'accueil équipe', 'accueil service', 'accueil établissement', 'accueil hôpital',
+      'accueil centre', 'accueil clinique', 'accueil cabinet', 'accueil consultation', 'accueil rendez-vous',
+      'accueil visite', 'accueil hospitalisation', 'accueil séjour', 'accueil admission', 'accueil sortie'
+    ],
+    'prestation_hoteliere': [
+      'chambre', 'chambres', 'sanitaires', 'toilettes', 'douche', 'bain', 'salle de bain', 'salle d\'eau',
+      'locaux', 'lieu de vie', 'box', 'espace', 'environnement', 'ambiance', 'atmosphère', 'confort',
+      'confortable', 'inconfortable', 'agréable', 'désagréable', 'propre', 'sale', 'propreté', 'hygiène',
+      'nettoyage', 'entretien', 'ménage', 'femme de ménage', 'agent d\'entretien', 'agent de service',
+      'agent hospitalier', 'agent hôtelier', 'agent de chambre', 'agent de service', 'agent de ménage',
+      'agent d\'entretien', 'agent de nettoyage', 'agent de propreté', 'agent d\'hygiène', 'agent de service',
+      'agent hospitalier', 'agent hôtelier', 'agent de chambre', 'agent de service', 'agent de ménage',
+      'agent d\'entretien', 'agent de nettoyage', 'agent de propreté', 'agent d\'hygiène'
+    ],
+    'sortie': [
+      'sortie', 'départ', 'retour', 'domicile', 'maison', 'chez soi', 'retour à domicile', 'retour maison',
+      'retour chez soi', 'retour au domicile', 'retour à la maison', 'retour chez soi', 'retour au foyer',
+      'retour à la famille', 'retour aux proches', 'retour à l\'entourage', 'retour à l\'environnement',
+      'retour au milieu', 'retour au contexte', 'retour à la vie', 'retour à la réalité', 'retour à la normalité',
+      'retour à l\'habitude', 'retour à la routine', 'retour à l\'ordinaire', 'retour au quotidien',
+      'retour à la vie quotidienne', 'retour à la vie normale', 'retour à la vie ordinaire', 'retour à la vie habituelle',
+      'retour à la vie courante', 'retour à la vie usuelle', 'retour à la vie régulière', 'retour à la vie constante',
+      'retour à la vie stable', 'retour à la vie équilibrée', 'retour à la vie sereine', 'retour à la vie paisible',
+      'retour à la vie tranquille', 'retour à la vie calme', 'retour à la vie reposante', 'retour à la vie apaisante'
+    ],
+    'RAS': [
+      'ras', 'rien', 'néant', 'aucun', 'aucune', 'rien à signaler', 'rien à dire', 'rien à redire',
+      'rien à reprocher', 'rien à critiquer', 'rien à blâmer', 'rien à condamner', 'rien à sanctionner',
+      'rien à punir', 'rien à réprimander', 'rien à gronder', 'rien à sermonner', 'rien à morigéner',
+      'rien à tancer', 'rien à admonester', 'rien à réprimander', 'rien à blâmer', 'rien à condamner',
+      'rien à sanctionner', 'rien à punir', 'rien à réprimander', 'rien à gronder', 'rien à sermonner',
+      'rien à morigéner', 'rien à tancer', 'rien à admonester', 'rien à réprimander', 'rien à blâmer',
+      'rien à condamner', 'rien à sanctionner', 'rien à punir', 'rien à réprimander', 'rien à gronder',
+      'rien à sermonner', 'rien à morigéner', 'rien à tancer', 'rien à admonester', 'rien à réprimander'
+    ]
+  }
 }
 
 const SENTIMENT_COLORS = {
@@ -24,9 +110,27 @@ const SENTIMENT_COLORS = {
   neutre: '#6B7280'
 }
 
-const THEMES = [
-  'Accueil', 'Attente', 'Personnel', 'Douleur', 'Propreté', 
-  'Organisation', 'Communication', 'Satisfaction', 'Amélioration'
+// Mots à exclure de l'analyse des mots-clés
+const STOP_WORDS = [
+  'le', 'la', 'les', 'un', 'une', 'des', 'ce', 'ces', 'cette', 'de', 'du', 'des',
+  'et', 'ou', 'mais', 'donc', 'car', 'ni', 'or', 'avec', 'sans', 'pour', 'par',
+  'dans', 'sur', 'sous', 'entre', 'chez', 'vers', 'depuis', 'jusqu', 'pendant',
+  'avant', 'après', 'pendant', 'selon', 'malgré', 'sauf', 'excepté', 'hormis',
+  'je', 'tu', 'il', 'elle', 'nous', 'vous', 'ils', 'elles', 'me', 'te', 'se',
+  'mon', 'ton', 'son', 'ma', 'ta', 'sa', 'mes', 'tes', 'ses', 'notre', 'votre',
+  'leur', 'nos', 'vos', 'leurs', 'ceci', 'cela', 'ça', 'qui', 'que', 'quoi',
+  'où', 'quand', 'comment', 'pourquoi', 'combien', 'quel', 'quelle', 'quels',
+  'quelles', 'est', 'sont', 'était', 'étaient', 'être', 'avoir', 'faire', 'dire',
+  'voir', 'aller', 'venir', 'pouvoir', 'vouloir', 'devoir', 'savoir', 'falloir',
+  'très', 'trop', 'peu', 'assez', 'plus', 'moins', 'bien', 'mal', 'bon', 'mauvais',
+  'grand', 'petit', 'nouveau', 'vieux', 'jeune', 'vieux', 'beau', 'laid', 'bon',
+  'mauvais', 'bonne', 'mauvaise', 'belles', 'laides', 'bien', 'mal', 'mieux',
+  'pire', 'meilleur', 'pire', 'meilleure', 'pire', 'plus', 'moins', 'autant',
+  'tellement', 'si', 'tant', 'trop', 'assez', 'peu', 'beaucoup', 'trop', 'très',
+  'ne', 'pas', 'non', 'ni', 'aucun', 'nul', 'rien', 'personne', 'jamais',
+  'toujours', 'souvent', 'parfois', 'rarement', 'jamais', 'déjà', 'encore',
+  'bientôt', 'maintenant', 'aujourd', 'hier', 'demain', 'ici', 'là', 'ailleurs',
+  'partout', 'nulle', 'part', 'quelque', 'part', 'n', 'importe', 'où'
 ]
 
 export default function Home() {
@@ -34,49 +138,73 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false)
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null)
   const [dragActive, setDragActive] = useState(false)
+  const [trainingData, setTrainingData] = useState<any[]>([])
+  const [isTrainingMode, setIsTrainingMode] = useState(false)
+  
+  // États pour les filtres
+  const [selectedSentiment, setSelectedSentiment] = useState<string>('all')
+  const [selectedTheme, setSelectedTheme] = useState<string>('all')
 
+  // Fonction pour extraire les mots-clés
+  const extractKeywords = (texts: string[]): { word: string; count: number }[] => {
+    const wordCount: Record<string, number> = {}
+    
+    texts.forEach(text => {
+      const words = text.toLowerCase()
+        .replace(/[^\w\s]/g, ' ') // Remplacer la ponctuation par des espaces
+        .split(/\s+/)
+        .filter(word => 
+          word.length > 2 && 
+          !STOP_WORDS.includes(word) &&
+          !/^\d+$/.test(word) // Exclure les nombres
+        )
+      
+      words.forEach(word => {
+        if (word.length > 2) {
+          wordCount[word] = (wordCount[word] || 0) + 1
+        }
+      })
+    })
+    
+    return Object.entries(wordCount)
+      .map(([word, count]) => ({ word, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 20) // Top 20 mots-clés
+  }
+
+  // Fonction d'analyse améliorée basée sur les données d'entraînement
   const analyzeVerbatim = (text: string): { sentiment: Verbatim['sentiment'], thematique: string } => {
     const lowerText = text.toLowerCase()
     
-    // Analyse de sentiment basée sur des mots-clés
-    const positiveKeywords = ['bon', 'bien', 'excellent', 'parfait', 'satisfait', 'content', 'merci', 'super', 'génial', 'agréable', 'efficace', 'rapide', 'professionnel']
-    const negativeKeywords = ['mauvais', 'mal', 'horrible', 'nul', 'décevant', 'mécontent', 'problème', 'lent', 'désagréable', 'incompétent', 'erreur', 'retard']
+    // Analyse de sentiment basée sur les données d'entraînement
+    const positiveScore = TRAINING_DATA.positiveKeywords.filter(word => 
+      lowerText.includes(word)
+    ).length
+    
+    const negativeScore = TRAINING_DATA.negativeKeywords.filter(word => 
+      lowerText.includes(word)
+    ).length
     
     let sentiment: Verbatim['sentiment'] = 'neutre'
-    const positiveCount = positiveKeywords.filter(word => lowerText.includes(word)).length
-    const negativeCount = negativeKeywords.filter(word => lowerText.includes(word)).length
-    
-    if (positiveCount > negativeCount) {
+    if (positiveScore > negativeScore) {
       sentiment = 'positif'
-    } else if (negativeCount > positiveCount) {
+    } else if (negativeScore > positiveScore) {
       sentiment = 'négatif'
     }
     
-    // Analyse thématique basée sur des mots-clés
-    const themeKeywords = {
-      'Accueil': ['accueil', 'réception', 'entrée', 'première impression'],
-      'Attente': ['attente', 'délai', 'patience', 'temps', 'file'],
-      'Personnel': ['personnel', 'équipe', 'médecin', 'infirmière', 'secrétaire'],
-      'Douleur': ['douleur', 'mal', 'souffrance', 'inconfort'],
-      'Propreté': ['propreté', 'propre', 'sale', 'hygiène', 'nettoyage'],
-      'Organisation': ['organisation', 'planification', 'rendez-vous', 'horaire'],
-      'Communication': ['communication', 'information', 'explication', 'écoute'],
-      'Satisfaction': ['satisfaction', 'recommande', 'qualité', 'service'],
-      'Amélioration': ['amélioration', 'suggestion', 'conseil', 'mieux']
-    }
+    // Analyse thématique basée sur les données d'entraînement
+    let bestTheme = 'RAS'
+    let maxScore = 0
     
-    let thematique = 'Général'
-    let maxMatches = 0
-    
-    Object.entries(themeKeywords).forEach(([theme, keywords]) => {
-      const matches = keywords.filter(keyword => lowerText.includes(keyword)).length
-      if (matches > maxMatches) {
-        maxMatches = matches
-        thematique = theme
+    Object.entries(TRAINING_DATA.themes).forEach(([theme, keywords]) => {
+      const score = keywords.filter(keyword => lowerText.includes(keyword)).length
+      if (score > maxScore) {
+        maxScore = score
+        bestTheme = theme
       }
     })
     
-    return { sentiment, thematique }
+    return { sentiment, thematique: bestTheme }
   }
 
   const processVerbatims = async (texts: string[]) => {
@@ -117,30 +245,75 @@ export default function Home() {
       value
     }))
     
+    // Extraction des mots-clés
+    const keywords = extractKeywords(texts)
+    
     setAnalysisResult({
       verbatims: analyzed,
       sentimentStats,
-      themeStats
+      themeStats,
+      keywords
     })
     
     setIsLoading(false)
   }
 
+  // Filtrage des verbatims selon les filtres sélectionnés
+  const filteredVerbatims = useMemo(() => {
+    if (!analysisResult) return []
+    
+    return analysisResult.verbatims.filter(verbatim => {
+      const sentimentMatch = selectedSentiment === 'all' || verbatim.sentiment === selectedSentiment
+      const themeMatch = selectedTheme === 'all' || verbatim.thematique === selectedTheme
+      return sentimentMatch && themeMatch
+    })
+  }, [analysisResult, selectedSentiment, selectedTheme])
+
+  // Réinitialiser les filtres quand on change d'analyse
+  const resetFilters = () => {
+    setSelectedSentiment('all')
+    setSelectedTheme('all')
+  }
+
+  // Fonction pour charger les données d'entraînement
+  const loadTrainingData = (file: File) => {
+    Papa.parse(file, {
+      header: true,
+      complete: (results) => {
+        const data = results.data.filter((row: any) => 
+          row.polarite && row.verbatim && row.thematiques
+        ).map((row: any) => ({
+          polarite: row.polarite,
+          verbatim: row.verbatim,
+          thematiques: row.thematiques.split(',').map((t: string) => t.trim()),
+          sous_thematiques: row.sous_thematiques ? row.sous_thematiques.split(',').map((t: string) => t.trim()) : []
+        }))
+        
+        setTrainingData(data)
+        setIsTrainingMode(true)
+      }
+    })
+  }
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file && file.type === 'text/csv') {
-      Papa.parse(file, {
-        header: true,
-        complete: (results) => {
-          const verbatimTexts = results.data
-            .map((row: any) => row.verbatim || row.Verbatim || '')
-            .filter((text: string) => text.trim().length > 0)
-          
-          if (verbatimTexts.length > 0) {
-            processVerbatims(verbatimTexts)
+      if (isTrainingMode) {
+        loadTrainingData(file)
+      } else {
+        Papa.parse(file, {
+          header: true,
+          complete: (results) => {
+            const verbatimTexts = results.data
+              .map((row: any) => row.verbatim || row.Verbatim || '')
+              .filter((text: string) => text.trim().length > 0)
+            
+            if (verbatimTexts.length > 0) {
+              processVerbatims(verbatimTexts)
+            }
           }
-        }
-      })
+        })
+      }
     }
   }
 
@@ -161,18 +334,22 @@ export default function Home() {
     
     const files = e.dataTransfer.files
     if (files?.[0]?.type === 'text/csv') {
-      Papa.parse(files[0], {
-        header: true,
-        complete: (results) => {
-          const verbatimTexts = results.data
-            .map((row: any) => row.verbatim || row.Verbatim || '')
-            .filter((text: string) => text.trim().length > 0)
-          
-          if (verbatimTexts.length > 0) {
-            processVerbatims(verbatimTexts)
+      if (isTrainingMode) {
+        loadTrainingData(files[0])
+      } else {
+        Papa.parse(files[0], {
+          header: true,
+          complete: (results) => {
+            const verbatimTexts = results.data
+              .map((row: any) => row.verbatim || row.Verbatim || '')
+              .filter((text: string) => text.trim().length > 0)
+            
+            if (verbatimTexts.length > 0) {
+              processVerbatims(verbatimTexts)
+            }
           }
-        }
-      })
+        })
+      }
     }
   }
 
@@ -183,19 +360,97 @@ export default function Home() {
     }
   }
 
-  const exportResults = () => {
+  const exportResults = (format: 'csv' | 'json' | 'excel' = 'csv', filtered: boolean = false) => {
     if (!analysisResult) return
     
-    const csv = Papa.unparse(analysisResult.verbatims.map(v => ({
-      'Verbatim': v.text,
-      'Sentiment': v.sentiment,
-      'Thématique': v.thematique
-    })))
+    const dataToExport = filtered ? filteredVerbatims : analysisResult.verbatims
     
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    if (format === 'csv') {
+      const csv = Papa.unparse(dataToExport.map(v => ({
+        'Verbatim': v.text,
+        'Sentiment': v.sentiment,
+        'Thématique': THEME_DISPLAY_NAMES[v.thematique as keyof typeof THEME_DISPLAY_NAMES] || v.thematique,
+        'Code Thématique': v.thematique
+      })))
+      
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = `analyse_verbatims_${filtered ? 'filtres' : 'complet'}.csv`
+      link.click()
+    } else if (format === 'json') {
+      const exportData = {
+        metadata: {
+          date: new Date().toISOString(),
+          totalVerbatims: analysisResult.verbatims.length,
+          filteredVerbatims: filtered ? filteredVerbatims.length : analysisResult.verbatims.length,
+          filters: filtered ? {
+            sentiment: selectedSentiment,
+            theme: selectedTheme
+          } : null,
+          statistics: {
+            sentiments: analysisResult.sentimentStats,
+            themes: analysisResult.themeStats,
+            keywords: analysisResult.keywords
+          }
+        },
+        verbatims: dataToExport.map(v => ({
+          id: v.id,
+          text: v.text,
+          sentiment: v.sentiment,
+          thematique: v.thematique,
+          thematiqueDisplay: THEME_DISPLAY_NAMES[v.thematique as keyof typeof THEME_DISPLAY_NAMES] || v.thematique
+        }))
+      }
+      
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = `analyse_verbatims_${filtered ? 'filtres' : 'complet'}.json`
+      link.click()
+    }
+  }
+
+  const exportAllData = () => {
+    if (!analysisResult) return
+    
+    // Export complet avec toutes les données
+    const allData = {
+      metadata: {
+        date: new Date().toISOString(),
+        totalVerbatims: analysisResult.verbatims.length,
+        filters: {
+          sentiment: selectedSentiment,
+          theme: selectedTheme
+        }
+      },
+      statistics: {
+        sentiments: analysisResult.sentimentStats,
+        themes: analysisResult.themeStats,
+        keywords: analysisResult.keywords
+      },
+      verbatims: {
+        all: analysisResult.verbatims.map(v => ({
+          id: v.id,
+          text: v.text,
+          sentiment: v.sentiment,
+          thematique: v.thematique,
+          thematiqueDisplay: THEME_DISPLAY_NAMES[v.thematique as keyof typeof THEME_DISPLAY_NAMES] || v.thematique
+        })),
+        filtered: filteredVerbatims.map(v => ({
+          id: v.id,
+          text: v.text,
+          sentiment: v.sentiment,
+          thematique: v.thematique,
+          thematiqueDisplay: THEME_DISPLAY_NAMES[v.thematique as keyof typeof THEME_DISPLAY_NAMES] || v.thematique
+        }))
+      }
+    }
+    
+    const blob = new Blob([JSON.stringify(allData, null, 2)], { type: 'application/json' })
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)
-    link.download = 'analyse_verbatims.csv'
+    link.download = `analyse_verbatims_complete_${new Date().toISOString().split('T')[0]}.json`
     link.click()
   }
 
@@ -209,9 +464,32 @@ export default function Home() {
           <p className="text-gray-600">
             Analysez vos verbatim automatiquement par sentiment et thématique
           </p>
+          <div className="mt-4 flex justify-center space-x-4">
+            <button
+              onClick={() => setIsTrainingMode(false)}
+              className={`px-4 py-2 rounded-md transition-colors ${
+                !isTrainingMode 
+                  ? 'bg-blue-500 text-white' 
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Mode Analyse
+            </button>
+            <button
+              onClick={() => setIsTrainingMode(true)}
+              className={`px-4 py-2 rounded-md transition-colors flex items-center ${
+                isTrainingMode 
+                  ? 'bg-green-500 text-white' 
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              <Brain className="mr-2 h-4 w-4" />
+              Mode Entraînement
+            </button>
+          </div>
         </div>
 
-        {!analysisResult ? (
+        {!analysisResult && !isTrainingMode ? (
           <div className="max-w-4xl mx-auto">
             <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
               <h2 className="text-2xl font-semibold mb-4 flex items-center">
@@ -283,6 +561,86 @@ export default function Home() {
               </div>
             )}
           </div>
+        ) : isTrainingMode ? (
+          <div className="max-w-4xl mx-auto">
+            <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+              <h2 className="text-2xl font-semibold mb-4 flex items-center">
+                <Database className="mr-2" />
+                Mode Entraînement - Amélioration de l'algorithme
+              </h2>
+              <p className="text-gray-600 mb-6">
+                Importez vos fichiers CSV avec les données d'entraînement pour affiner l'algorithme de classification.
+                Les fichiers doivent contenir les colonnes : polarite, verbatim, thematiques, sous_thematiques
+              </p>
+              
+              <div className="grid md:grid-cols-2 gap-6">
+                <div>
+                  <h3 className="text-lg font-medium mb-3">Fichier CSV d'entraînement</h3>
+                  <div
+                    className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                      dragActive ? 'border-green-400 bg-green-50' : 'border-gray-300'
+                    }`}
+                    onDragEnter={handleDrag}
+                    onDragLeave={handleDrag}
+                    onDragOver={handleDrag}
+                    onDrop={handleDrop}
+                  >
+                    <Database className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                    <p className="text-sm text-gray-600 mb-2">
+                      Glissez-déposez votre fichier CSV d'entraînement ici ou
+                    </p>
+                    <label className="cursor-pointer bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md transition-colors">
+                      Parcourir
+                      <input
+                        type="file"
+                        accept=".csv"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                      />
+                    </label>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Format attendu : polarite, verbatim, thematiques, sous_thematiques
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-medium mb-3">Données d'entraînement chargées</h3>
+                  {trainingData.length > 0 ? (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                      <div className="flex items-center mb-2">
+                        <Database className="h-5 w-5 text-green-600 mr-2" />
+                        <span className="font-medium text-green-800">
+                          {trainingData.length} verbatims d'entraînement chargés
+                        </span>
+                      </div>
+                      <div className="text-sm text-green-700">
+                        <p>• Sentiments : {new Set(trainingData.map(d => d.polarite)).size} types</p>
+                        <p>• Thématiques : {new Set(trainingData.flatMap(d => d.thematiques)).size} types</p>
+                        <p>• Sous-thématiques : {new Set(trainingData.flatMap(d => d.sous_thematiques)).size} types</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setTrainingData([])
+                          setIsTrainingMode(false)
+                        }}
+                        className="mt-3 bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm"
+                      >
+                        Retourner au mode analyse
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
+                      <p className="text-gray-600">Aucune donnée d'entraînement chargée</p>
+                      <p className="text-sm text-gray-500 mt-1">
+                        Importez un fichier CSV pour commencer l'entraînement
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         ) : (
           <div className="max-w-7xl mx-auto">
             {/* Header avec export */}
@@ -291,27 +649,108 @@ export default function Home() {
                 <div>
                   <h2 className="text-2xl font-semibold">Résultats d'analyse</h2>
                   <p className="text-gray-600">
-                    {analysisResult.verbatims.length} verbatim(s) analysé(s)
+                    {analysisResult?.verbatims.length || 0} verbatim(s) analysé(s)
                   </p>
                 </div>
                 <div className="flex space-x-3">
-                  <button
-                    onClick={exportResults}
-                    className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md flex items-center"
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    Exporter CSV
-                  </button>
+                  <div className="relative group">
+                    <button
+                      onClick={() => exportResults('csv', false)}
+                      className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md flex items-center"
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Exporter
+                    </button>
+                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                      <div className="py-1">
+                        <button
+                          onClick={() => exportResults('csv', false)}
+                          className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                          📊 CSV Complet
+                        </button>
+                        <button
+                          onClick={() => exportResults('csv', true)}
+                          className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                          🔍 CSV Filtres
+                        </button>
+                        <button
+                          onClick={() => exportResults('json', false)}
+                          className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                          📄 JSON Complet
+                        </button>
+                        <button
+                          onClick={() => exportResults('json', true)}
+                          className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                          🔍 JSON Filtres
+                        </button>
+                        <div className="border-t border-gray-200 my-1"></div>
+                        <button
+                          onClick={exportAllData}
+                          className="block w-full text-left px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 font-medium"
+                        >
+                          🚀 Export Complet (Tout)
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                   <button
                     onClick={() => {
                       setAnalysisResult(null)
                       setVerbatims('')
+                      resetFilters()
                     }}
                     className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md"
                   >
                     Nouvelle analyse
                   </button>
                 </div>
+              </div>
+            </div>
+
+            {/* Filtres */}
+            <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+              <h3 className="text-lg font-semibold mb-4 flex items-center">
+                <Filter className="mr-2" />
+                Filtres
+              </h3>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Filtrer par sentiment
+                  </label>
+                  <select
+                    value={selectedSentiment}
+                    onChange={(e) => setSelectedSentiment(e.target.value)}
+                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="all">Tous les sentiments</option>
+                    <option value="positif">Positif</option>
+                    <option value="négatif">Négatif</option>
+                    <option value="neutre">Neutre</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Filtrer par thématique
+                  </label>
+                  <select
+                    value={selectedTheme}
+                    onChange={(e) => setSelectedTheme(e.target.value)}
+                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="all">Toutes les thématiques</option>
+                    {Object.keys(TRAINING_DATA.themes).map(theme => (
+                      <option key={theme} value={theme}>{THEME_DISPLAY_NAMES[theme as keyof typeof THEME_DISPLAY_NAMES]}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="mt-4 text-sm text-gray-600">
+                {filteredVerbatims.length} verbatim(s) affiché(s) sur {analysisResult?.verbatims.length || 0} total
               </div>
             </div>
 
@@ -326,14 +765,14 @@ export default function Home() {
                 <ResponsiveContainer width="100%" height={300}>
                   <RechartsPieChart>
                     <Pie
-                      data={analysisResult.sentimentStats}
+                      data={analysisResult?.sentimentStats || []}
                       cx="50%"
                       cy="50%"
                       outerRadius={80}
                       dataKey="value"
                       label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                     >
-                      {analysisResult.sentimentStats.map((entry, index) => (
+                      {analysisResult?.sentimentStats?.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
@@ -349,7 +788,7 @@ export default function Home() {
                   Répartition des thématiques
                 </h3>
                 <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={analysisResult.themeStats}>
+                  <BarChart data={analysisResult?.themeStats || []}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
                     <YAxis />
@@ -357,6 +796,37 @@ export default function Home() {
                     <Bar dataKey="value" fill="#3B82F6" />
                   </BarChart>
                 </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Mots-clés les plus présents */}
+            <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+              <h3 className="text-lg font-semibold mb-4 flex items-center">
+                <Tag className="mr-2" />
+                Mots-clés les plus présents
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                {analysisResult?.keywords?.map((keyword, index) => (
+                  <div key={keyword.word} className="bg-gray-100 rounded-lg p-3 text-center">
+                    <div className="text-lg font-semibold text-gray-800">{keyword.word}</div>
+                    <div className="text-sm text-gray-600">{keyword.count} occurrence(s)</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Informations sur les exports */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+              <h4 className="text-sm font-semibold text-blue-800 mb-2 flex items-center">
+                <Download className="mr-2 h-4 w-4" />
+                Options d'Export Disponibles
+              </h4>
+              <div className="text-sm text-blue-700 space-y-1">
+                <p>• <strong>CSV Complet</strong> : Tous les verbatims avec sentiment et thématique</p>
+                <p>• <strong>CSV Filtres</strong> : Seulement les verbatims filtrés actuellement</p>
+                <p>• <strong>JSON Complet</strong> : Données structurées avec métadonnées</p>
+                <p>• <strong>JSON Filtres</strong> : Données filtrées au format JSON</p>
+                <p>• <strong>Export Complet</strong> : Toutes les données + statistiques + verbatims complets et filtrés</p>
               </div>
             </div>
 
@@ -373,7 +843,7 @@ export default function Home() {
                     </tr>
                   </thead>
                   <tbody>
-                    {analysisResult.verbatims.map((verbatim) => (
+                    {filteredVerbatims.map((verbatim) => (
                       <tr key={verbatim.id} className="border-b hover:bg-gray-50">
                         <td className="p-2 max-w-md">{verbatim.text}</td>
                         <td className="p-2">
@@ -388,7 +858,7 @@ export default function Home() {
                         </td>
                         <td className="p-2">
                           <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            {verbatim.thematique}
+                            {THEME_DISPLAY_NAMES[verbatim.thematique as keyof typeof THEME_DISPLAY_NAMES] || verbatim.thematique}
                           </span>
                         </td>
                       </tr>
