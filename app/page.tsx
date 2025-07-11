@@ -19,6 +19,22 @@ interface AnalysisResult {
   keywords: { word: string; count: number }[]
 }
 
+// Configuration de l'API Hugging Face Space
+const API_CONFIG = {
+  // Remplacez par l'URL de votre Space Hugging Face
+  baseUrl: 'https://your-username-verbatim-analyzer.hf.space',
+  endpoints: {
+    analyze: '/api/predict'
+  }
+}
+
+// Mapping des sentiments de l'API vers l'interface
+const SENTIMENT_MAPPING = {
+  'LABEL_0': 'négatif',
+  'LABEL_1': 'neutre', 
+  'LABEL_2': 'positif'
+}
+
 // Mapping des thématiques avec des noms d'affichage sympas
 const THEME_DISPLAY_NAMES = {
   'prise_en_charge': '🩺 Prise en Charge',
@@ -26,82 +42,6 @@ const THEME_DISPLAY_NAMES = {
   'prestation_hoteliere': '🏨 Confort & Logement',
   'sortie': '🚪 Sortie & Suivi',
   'RAS': '✅ Rien à Signaler'
-}
-
-// Données d'entraînement basées sur les fichiers CSV
-const TRAINING_DATA = {
-  positiveKeywords: [
-    'bon', 'bien', 'excellent', 'parfait', 'satisfait', 'content', 'merci', 'super', 'génial', 'agréable', 
-    'efficace', 'rapide', 'professionnel', 'gentil', 'sympathique', 'compétent', 'rassurant', 'écoute',
-    'disponible', 'attentif', 'bienveillant', 'empathie', 'humain', 'respectueux', 'chaleureux',
-    'professionnalisme', 'qualité', 'recommandation', 'remerciement', 'bravo', 'formidable', 'extraordinaire',
-    'magnifique', 'remarquable', 'irréprochable', 'parfaitement', 'excellente', 'très bien', 'très bon',
-    'très satisfait', 'très content', 'très agréable', 'très professionnel', 'très gentil', 'très sympathique',
-    'très compétent', 'très rassurant', 'très à l\'écoute', 'très disponible', 'très attentif', 'très bienveillant',
-    'très empathique', 'très humain', 'très respectueux', 'très chaleureux', 'très professionnel', 'très qualifié',
-    'très recommandé', 'très remercié', 'très bravo', 'très formidable', 'très extraordinaire', 'très magnifique',
-    'très remarquable', 'très irréprochable', 'très parfaitement', 'très excellente'
-  ],
-  negativeKeywords: [
-    'mauvais', 'mal', 'horrible', 'nul', 'décevant', 'mécontent', 'problème', 'lent', 'désagréable', 
-    'incompétent', 'erreur', 'retard', 'attente', 'long', 'difficile', 'douloureux', 'douleur', 'souffrance',
-    'inconfort', 'stress', 'angoisse', 'inquiétude', 'peur', 'crainte', 'déception', 'frustration',
-    'colère', 'irritation', 'agacement', 'énervement', 'exaspération', 'exaspéré', 'énervé', 'irrité',
-    'agacé', 'frustré', 'déçu', 'inquiet', 'angoissé', 'stressé', 'douloureux', 'souffrant', 'inconfortable',
-    'mal à l\'aise', 'gêné', 'embarrassé', 'humilié', 'déshonoré', 'méprisé', 'ignoré', 'négligé',
-    'abandonné', 'laissé', 'oublié', 'négligé', 'délaissé', 'délaissé', 'abandonné', 'laissé pour compte',
-    'mal traité', 'mal soigné', 'mal accueilli', 'mal informé', 'mal expliqué', 'mal rassuré', 'mal écouté',
-    'mal compris', 'mal pris en charge', 'mal organisé', 'mal coordonné', 'mal géré', 'mal administré'
-  ],
-  themes: {
-    'prise_en_charge': [
-      'prise en charge', 'soins', 'soignant', 'infirmier', 'infirmière', 'médecin', 'docteur', 'chirurgien',
-      'anesthésiste', 'professionnel', 'équipe', 'personnel', 'compétence', 'professionnalisme', 'qualité',
-      'efficacité', 'disponibilité', 'écoute', 'attention', 'bienveillance', 'empathie', 'humanité',
-      'respect', 'dignité', 'confidentialité', 'consentement', 'droits', 'patient', 'malade', 'santé',
-      'médical', 'paramédical', 'soins infirmiers', 'soins médicaux', 'traitement', 'intervention',
-      'opération', 'chirurgie', 'anesthésie', 'récupération', 'rétablissement', 'guérison', 'amélioration'
-    ],
-    'accueil': [
-      'accueil', 'réception', 'admission', 'entrée', 'arrivée', 'première impression', 'circuit',
-      'administratif', 'secrétariat', 'secrétaire', 'guichet', 'accueil administratif', 'accueil médical',
-      'accueil soignant', 'accueil infirmier', 'accueil médecin', 'accueil chirurgien', 'accueil anesthésiste',
-      'accueil personnel', 'accueil équipe', 'accueil service', 'accueil établissement', 'accueil hôpital',
-      'accueil centre', 'accueil clinique', 'accueil cabinet', 'accueil consultation', 'accueil rendez-vous',
-      'accueil visite', 'accueil hospitalisation', 'accueil séjour', 'accueil admission', 'accueil sortie'
-    ],
-    'prestation_hoteliere': [
-      'chambre', 'chambres', 'sanitaires', 'toilettes', 'douche', 'bain', 'salle de bain', 'salle d\'eau',
-      'locaux', 'lieu de vie', 'box', 'espace', 'environnement', 'ambiance', 'atmosphère', 'confort',
-      'confortable', 'inconfortable', 'agréable', 'désagréable', 'propre', 'sale', 'propreté', 'hygiène',
-      'nettoyage', 'entretien', 'ménage', 'femme de ménage', 'agent d\'entretien', 'agent de service',
-      'agent hospitalier', 'agent hôtelier', 'agent de chambre', 'agent de service', 'agent de ménage',
-      'agent d\'entretien', 'agent de nettoyage', 'agent de propreté', 'agent d\'hygiène', 'agent de service',
-      'agent hospitalier', 'agent hôtelier', 'agent de chambre', 'agent de service', 'agent de ménage',
-      'agent d\'entretien', 'agent de nettoyage', 'agent de propreté', 'agent d\'hygiène'
-    ],
-    'sortie': [
-      'sortie', 'départ', 'retour', 'domicile', 'maison', 'chez soi', 'retour à domicile', 'retour maison',
-      'retour chez soi', 'retour au domicile', 'retour à la maison', 'retour chez soi', 'retour au foyer',
-      'retour à la famille', 'retour aux proches', 'retour à l\'entourage', 'retour à l\'environnement',
-      'retour au milieu', 'retour au contexte', 'retour à la vie', 'retour à la réalité', 'retour à la normalité',
-      'retour à l\'habitude', 'retour à la routine', 'retour à l\'ordinaire', 'retour au quotidien',
-      'retour à la vie quotidienne', 'retour à la vie normale', 'retour à la vie ordinaire', 'retour à la vie habituelle',
-      'retour à la vie courante', 'retour à la vie usuelle', 'retour à la vie régulière', 'retour à la vie constante',
-      'retour à la vie stable', 'retour à la vie équilibrée', 'retour à la vie sereine', 'retour à la vie paisible',
-      'retour à la vie tranquille', 'retour à la vie calme', 'retour à la vie reposante', 'retour à la vie apaisante'
-    ],
-    'RAS': [
-      'ras', 'rien', 'néant', 'aucun', 'aucune', 'rien à signaler', 'rien à dire', 'rien à redire',
-      'rien à reprocher', 'rien à critiquer', 'rien à blâmer', 'rien à condamner', 'rien à sanctionner',
-      'rien à punir', 'rien à réprimander', 'rien à gronder', 'rien à sermonner', 'rien à morigéner',
-      'rien à tancer', 'rien à admonester', 'rien à réprimander', 'rien à blâmer', 'rien à condamner',
-      'rien à sanctionner', 'rien à punir', 'rien à réprimander', 'rien à gronder', 'rien à sermonner',
-      'rien à morigéner', 'rien à tancer', 'rien à admonester', 'rien à réprimander', 'rien à blâmer',
-      'rien à condamner', 'rien à sanctionner', 'rien à punir', 'rien à réprimander', 'rien à gronder',
-      'rien à sermonner', 'rien à morigéner', 'rien à tancer', 'rien à admonester', 'rien à réprimander'
-    ]
-  }
 }
 
 const SENTIMENT_COLORS = {
@@ -143,6 +83,8 @@ export default function Home() {
   const [isWordSelectionMode, setIsWordSelectionMode] = useState(false)
   const [selectedWords, setSelectedWords] = useState<string[]>([])
   const [showWordTrainingPanel, setShowWordTrainingPanel] = useState(false)
+  const [apiError, setApiError] = useState<string | null>(null)
+  const [apiUrl, setApiUrl] = useState<string>(API_CONFIG.baseUrl)
   
   // États pour les filtres
   const [selectedSentiment, setSelectedSentiment] = useState<string>('all')
@@ -175,18 +117,57 @@ export default function Home() {
       .slice(0, 20) // Top 20 mots-clés
   }
 
-  // Fonction d'analyse améliorée basée sur les données d'entraînement
-  const analyzeVerbatim = (text: string): { sentiment: Verbatim['sentiment'], thematique: string } => {
+  // Fonction pour analyser un verbatim via l'API
+  const analyzeVerbatimWithAPI = async (text: string, themes: string = 'Accueil, Attente, Soins'): Promise<{ sentiment: Verbatim['sentiment'], thematique: string }> => {
+    try {
+      const response = await fetch(`${apiUrl}${API_CONFIG.endpoints.analyze}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          data: [text, themes]
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error(`Erreur API: ${response.status}`)
+      }
+
+      const result = await response.json()
+      
+      // Traitement de la réponse de l'API
+      const apiResult = result.data[0]
+      
+      // Mapping du sentiment
+      const sentiment = SENTIMENT_MAPPING[apiResult.sentiment as keyof typeof SENTIMENT_MAPPING] || 'neutre'
+      
+      // Mapping de la thématique
+      const thematique = apiResult.theme || 'RAS'
+      
+      return { 
+        sentiment: sentiment as Verbatim['sentiment'], 
+        thematique 
+      }
+    } catch (error) {
+      console.error('Erreur lors de l\'analyse:', error)
+      setApiError(`Erreur de connexion à l'API: ${error instanceof Error ? error.message : 'Erreur inconnue'}`)
+      
+      // Fallback vers l'analyse locale en cas d'erreur
+      return analyzeVerbatimLocal(text)
+    }
+  }
+
+  // Fonction d'analyse locale (fallback)
+  const analyzeVerbatimLocal = (text: string): { sentiment: Verbatim['sentiment'], thematique: string } => {
     const lowerText = text.toLowerCase()
     
-    // Analyse de sentiment basée sur les données d'entraînement
-    const positiveScore = TRAINING_DATA.positiveKeywords.filter(word => 
-      lowerText.includes(word)
-    ).length
+    // Analyse simple basée sur des mots-clés
+    const positiveWords = ['bon', 'bien', 'excellent', 'parfait', 'satisfait', 'content', 'merci', 'super']
+    const negativeWords = ['mauvais', 'mal', 'horrible', 'nul', 'décevant', 'mécontent', 'problème']
     
-    const negativeScore = TRAINING_DATA.negativeKeywords.filter(word => 
-      lowerText.includes(word)
-    ).length
+    const positiveScore = positiveWords.filter(word => lowerText.includes(word)).length
+    const negativeScore = negativeWords.filter(word => lowerText.includes(word)).length
     
     let sentiment: Verbatim['sentiment'] = 'neutre'
     if (positiveScore > negativeScore) {
@@ -195,11 +176,17 @@ export default function Home() {
       sentiment = 'négatif'
     }
     
-    // Analyse thématique basée sur les données d'entraînement
+    // Thématique simple
+    const themes = {
+      'soins': ['soins', 'médecin', 'infirmier', 'traitement'],
+      'accueil': ['accueil', 'réception', 'admission'],
+      'confort': ['chambre', 'confort', 'repas']
+    }
+    
     let bestTheme = 'RAS'
     let maxScore = 0
     
-    Object.entries(TRAINING_DATA.themes).forEach(([theme, keywords]) => {
+    Object.entries(themes).forEach(([theme, keywords]) => {
       const score = keywords.filter(keyword => lowerText.includes(keyword)).length
       if (score > maxScore) {
         maxScore = score
@@ -212,53 +199,66 @@ export default function Home() {
 
   const processVerbatims = async (texts: string[]) => {
     setIsLoading(true)
+    setApiError(null)
     
-    // Simulation d'un délai d'analyse
-    await new Promise(resolve => setTimeout(resolve, 1500))
-    
-    const analyzed: Verbatim[] = texts.map((text, index) => {
-      const { sentiment, thematique } = analyzeVerbatim(text)
-      return {
-        id: `v_${index}`,
-        text: text.trim(),
-        sentiment,
-        thematique
+    try {
+      const analyzed: Verbatim[] = []
+      
+      // Traitement séquentiel pour éviter de surcharger l'API
+      for (let i = 0; i < texts.length; i++) {
+        const text = texts[i].trim()
+        if (text.length > 0) {
+          const { sentiment, thematique } = await analyzeVerbatimWithAPI(text)
+          analyzed.push({
+            id: `v_${i}`,
+            text,
+            sentiment,
+            thematique
+          })
+          
+          // Petit délai entre les requêtes
+          if (i < texts.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 100))
+          }
+        }
       }
-    }).filter(v => v.text.length > 0)
-    
-    // Calcul des statistiques
-    const sentimentCounts = analyzed.reduce((acc, v) => {
-      acc[v.sentiment] = (acc[v.sentiment] || 0) + 1
-      return acc
-    }, {} as Record<string, number>)
-    
-    const themeCounts = analyzed.reduce((acc, v) => {
-      acc[v.thematique] = (acc[v.thematique] || 0) + 1
-      return acc
-    }, {} as Record<string, number>)
-    
-    const sentimentStats = Object.entries(sentimentCounts).map(([name, value]) => ({
-      name,
-      value,
-      color: SENTIMENT_COLORS[name as keyof typeof SENTIMENT_COLORS]
-    }))
-    
-    const themeStats = Object.entries(themeCounts).map(([name, value]) => ({
-      name,
-      value
-    }))
-    
-    // Extraction des mots-clés
-    const keywords = extractKeywords(texts)
-    
-    setAnalysisResult({
-      verbatims: analyzed,
-      sentimentStats,
-      themeStats,
-      keywords
-    })
-    
-    setIsLoading(false)
+      
+      // Calcul des statistiques
+      const sentimentCounts = analyzed.reduce((acc, v) => {
+        acc[v.sentiment] = (acc[v.sentiment] || 0) + 1
+        return acc
+      }, {} as Record<string, number>)
+      
+      const themeCounts = analyzed.reduce((acc, v) => {
+        acc[v.thematique] = (acc[v.thematique] || 0) + 1
+        return acc
+      }, {} as Record<string, number>)
+      
+      const sentimentStats = Object.entries(sentimentCounts).map(([name, value]) => ({
+        name,
+        value,
+        color: SENTIMENT_COLORS[name as keyof typeof SENTIMENT_COLORS]
+      }))
+      
+      const themeStats = Object.entries(themeCounts).map(([name, value]) => ({
+        name,
+        value
+      }))
+      
+      const keywords = extractKeywords(analyzed.map(v => v.text))
+      
+      setAnalysisResult({
+        verbatims: analyzed,
+        sentimentStats,
+        themeStats,
+        keywords
+      })
+    } catch (error) {
+      console.error('Erreur lors du traitement:', error)
+      setApiError('Erreur lors de l\'analyse des verbatims')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   // Filtrage des verbatims selon les filtres sélectionnés
@@ -309,25 +309,10 @@ export default function Home() {
   const addWordsToTraining = (type: 'positive' | 'negative') => {
     if (selectedWords.length === 0) return
 
-    const newWords = selectedWords.filter(word => 
-      !TRAINING_DATA.positiveKeywords.includes(word) && 
-      !TRAINING_DATA.negativeKeywords.includes(word)
-    )
-
-    if (type === 'positive') {
-      TRAINING_DATA.positiveKeywords.push(...newWords)
-    } else {
-      TRAINING_DATA.negativeKeywords.push(...newWords)
-    }
-
+    // Cette fonctionnalité n'est plus nécessaire avec l'API
     setSelectedWords([])
     setShowWordTrainingPanel(false)
-    
-    // Re-analyser les verbatims avec les nouveaux mots
-    if (analysisResult) {
-      const texts = analysisResult.verbatims.map(v => v.text)
-      processVerbatims(texts)
-    }
+    alert('Cette fonctionnalité n\'est plus disponible avec l\'API Hugging Face')
   }
 
   // Fonction pour rendre un texte cliquable
@@ -338,8 +323,6 @@ export default function Home() {
     return words.map((word, index) => {
       const cleanWord = word.replace(/[^\w]/g, '').toLowerCase()
       const isSelected = selectedWords.includes(cleanWord)
-      const isPositive = TRAINING_DATA.positiveKeywords.includes(cleanWord)
-      const isNegative = TRAINING_DATA.negativeKeywords.includes(cleanWord)
       
       if (cleanWord.length < 3 || STOP_WORDS.includes(cleanWord)) {
         return <span key={index}>{word} </span>
@@ -347,15 +330,13 @@ export default function Home() {
 
       let bgColor = 'bg-gray-100'
       if (isSelected) bgColor = 'bg-yellow-200'
-      else if (isPositive) bgColor = 'bg-green-100'
-      else if (isNegative) bgColor = 'bg-red-100'
 
       return (
         <span
           key={index}
           className={`cursor-pointer hover:bg-blue-200 px-1 rounded ${bgColor} ${isSelected ? 'ring-2 ring-yellow-400' : ''}`}
           onClick={() => selectWord(cleanWord)}
-          title={`${isPositive ? 'Mot positif' : isNegative ? 'Mot négatif' : 'Cliquer pour sélectionner'}`}
+          title="Cliquer pour sélectionner"
         >
           {word}{' '}
         </span>
@@ -582,6 +563,41 @@ export default function Home() {
 
         {!analysisResult && !isTrainingMode && !isWordSelectionMode ? (
           <div className="max-w-4xl mx-auto">
+            {/* Configuration de l'API */}
+            <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+              <h2 className="text-2xl font-semibold mb-4 flex items-center">
+                <Brain className="mr-2" />
+                Configuration de l'API
+              </h2>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    URL de l'API Hugging Face Space
+                  </label>
+                  <input
+                    type="url"
+                    value={apiUrl}
+                    onChange={(e) => setApiUrl(e.target.value)}
+                    placeholder="https://your-username-verbatim-analyzer.hf.space"
+                    className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Remplacez par l'URL de votre Space Hugging Face déployé
+                  </p>
+                </div>
+                {apiError && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                    <p className="text-red-800 text-sm">
+                      ⚠️ {apiError}
+                    </p>
+                    <p className="text-red-600 text-xs mt-1">
+                      L'application utilise l'analyse locale en mode fallback
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
               <h2 className="text-2xl font-semibold mb-4 flex items-center">
                 <Upload className="mr-2" />
@@ -948,8 +964,10 @@ export default function Home() {
                     className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
                     <option value="all">Toutes les thématiques</option>
-                    {Object.keys(TRAINING_DATA.themes).map(theme => (
-                      <option key={theme} value={theme}>{THEME_DISPLAY_NAMES[theme as keyof typeof THEME_DISPLAY_NAMES]}</option>
+                    {analysisResult?.themeStats?.map(themeObj => (
+                      <option key={themeObj.name} value={themeObj.name}>
+                        {THEME_DISPLAY_NAMES[themeObj.name as keyof typeof THEME_DISPLAY_NAMES] || themeObj.name}
+                      </option>
                     ))}
                   </select>
                 </div>
