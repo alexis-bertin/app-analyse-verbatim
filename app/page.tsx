@@ -85,6 +85,7 @@ export default function Home() {
   const [showWordTrainingPanel, setShowWordTrainingPanel] = useState(false)
   const [apiError, setApiError] = useState<string | null>(null)
   const [apiUrl, setApiUrl] = useState<string>(API_CONFIG.baseUrl)
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null)
   
   // États pour les filtres
   const [selectedSentiment, setSelectedSentiment] = useState<string>('all')
@@ -117,7 +118,7 @@ export default function Home() {
       .slice(0, 20) // Top 20 mots-clés
   }
 
-  // Fonction pour analyser un verbatim via l'API
+  // Fonction pour analyser un verbatim via l'API avec timeout
   const analyzeVerbatimWithAPI = async (text: string, themes: string = 'Accueil, Attente, Soins'): Promise<{ sentiment: Verbatim['sentiment'], thematique: string }> => {
     try {
       console.log('Tentative de connexion à:', `${apiUrl}${API_CONFIG.endpoints.analyze}`)
@@ -127,14 +128,21 @@ export default function Home() {
       }
       console.log('Données envoyées:', requestBody)
       
+      // Contrôleur d'abandon pour timeout
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 60000) // 60 secondes max
+      
       const response = await fetch(`${apiUrl}${API_CONFIG.endpoints.analyze}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(requestBody),
+        signal: controller.signal
       })
 
+      clearTimeout(timeoutId)
+      
       console.log('Statut de la réponse:', response.status)
       console.log('Headers de la réponse:', Object.fromEntries(response.headers.entries()))
 
@@ -162,7 +170,16 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Erreur détaillée lors de l\'analyse:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue'
+      let errorMessage = 'Erreur inconnue'
+      
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          errorMessage = 'Timeout: L\'analyse a pris trop de temps (60s max)'
+        } else {
+          errorMessage = error.message
+        }
+      }
+      
       setApiError(`Erreur de connexion à l'API: ${errorMessage}`)
       
       // Fallback vers l'analyse locale en cas d'erreur
@@ -216,22 +233,59 @@ export default function Home() {
     try {
       const analyzed: Verbatim[] = []
       
-      // Traitement séquentiel pour éviter de surcharger l'API
-      for (let i = 0; i < texts.length; i++) {
-        const text = texts[i].trim()
-        if (text.length > 0) {
-          const { sentiment, thematique } = await analyzeVerbatimWithAPI(text)
-          analyzed.push({
-            id: `v_${i}`,
-            text,
-            sentiment,
-            thematique
-          })
+      // Traitement par lots pour optimiser les performances
+      const batchSize = 3 // Traiter 3 verbatims à la fois
+      const batches = []
+      
+      for (let i = 0; i < texts.length; i += batchSize) {
+        batches.push(texts.slice(i, i + batchSize))
+      }
+      
+      console.log(`Traitement de ${texts.length} verbatims en ${batches.length} lots`)
+      
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+        const batch = batches[batchIndex]
+        console.log(`Traitement du lot ${batchIndex + 1}/${batches.length}`)
+        
+        // Mise à jour de la progression
+        setProgress({ current: batchIndex + 1, total: batches.length })
+        
+        // Traitement parallèle dans chaque lot
+        const batchPromises = batch.map(async (text, index) => {
+          const textIndex = batchIndex * batchSize + index
+          const trimmedText = text.trim()
           
-          // Petit délai entre les requêtes
-          if (i < texts.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 100))
+          if (trimmedText.length > 0) {
+            try {
+              const { sentiment, thematique } = await analyzeVerbatimWithAPI(trimmedText)
+              return {
+                id: `v_${textIndex}`,
+                text: trimmedText,
+                sentiment,
+                thematique
+              }
+            } catch (error) {
+              console.error(`Erreur pour le verbatim ${textIndex}:`, error)
+              // Fallback local pour ce verbatim
+              const { sentiment, thematique } = analyzeVerbatimLocal(trimmedText)
+              return {
+                id: `v_${textIndex}`,
+                text: trimmedText,
+                sentiment,
+                thematique
+              }
+            }
           }
+          return null
+        })
+        
+        // Attendre que tous les verbatims du lot soient traités
+        const batchResults = await Promise.all(batchPromises)
+        analyzed.push(...batchResults.filter(v => v !== null))
+        
+        // Délai entre les lots pour éviter de surcharger l'API
+        if (batchIndex < batches.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500))
         }
       }
       
@@ -270,6 +324,7 @@ export default function Home() {
       setApiError('Erreur lors de l\'analyse des verbatims')
     } finally {
       setIsLoading(false)
+      setProgress(null)
     }
   }
 
@@ -705,6 +760,19 @@ export default function Home() {
               <div className="bg-white rounded-lg shadow-lg p-8 text-center">
                 <Loader2 className="animate-spin mx-auto h-12 w-12 text-blue-500 mb-4" />
                 <p className="text-gray-600">Analyse en cours...</p>
+                {progress && (
+                  <div className="mt-4">
+                    <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                      <div 
+                        className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                      ></div>
+                    </div>
+                    <p className="text-sm text-gray-500">
+                      Lot {progress.current} sur {progress.total}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>
