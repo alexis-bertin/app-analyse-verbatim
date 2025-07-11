@@ -120,21 +120,32 @@ export default function Home() {
   // Fonction pour analyser un verbatim via l'API
   const analyzeVerbatimWithAPI = async (text: string, themes: string = 'Accueil, Attente, Soins'): Promise<{ sentiment: Verbatim['sentiment'], thematique: string }> => {
     try {
+      console.log('Tentative de connexion à:', `${apiUrl}${API_CONFIG.endpoints.analyze}`)
+      
+      const requestBody = {
+        data: [text, themes]
+      }
+      console.log('Données envoyées:', requestBody)
+      
       const response = await fetch(`${apiUrl}${API_CONFIG.endpoints.analyze}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          data: [text, themes]
-        })
+        body: JSON.stringify(requestBody)
       })
 
+      console.log('Statut de la réponse:', response.status)
+      console.log('Headers de la réponse:', Object.fromEntries(response.headers.entries()))
+
       if (!response.ok) {
-        throw new Error(`Erreur API: ${response.status}`)
+        const errorText = await response.text()
+        console.error('Réponse d\'erreur complète:', errorText)
+        throw new Error(`Erreur API ${response.status}: ${errorText}`)
       }
 
       const result = await response.json()
+      console.log('Réponse de l\'API:', result)
       
       // Traitement de la réponse de l'API
       const apiResult = result.data[0]
@@ -150,8 +161,9 @@ export default function Home() {
         thematique 
       }
     } catch (error) {
-      console.error('Erreur lors de l\'analyse:', error)
-      setApiError(`Erreur de connexion à l'API: ${error instanceof Error ? error.message : 'Erreur inconnue'}`)
+      console.error('Erreur détaillée lors de l\'analyse:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue'
+      setApiError(`Erreur de connexion à l'API: ${errorMessage}`)
       
       // Fallback vers l'analyse locale en cas d'erreur
       return analyzeVerbatimLocal(text)
@@ -585,6 +597,34 @@ export default function Home() {
                     Remplacez par l'URL de votre Space Hugging Face déployé
                   </p>
                 </div>
+                
+                {/* Bouton de test de connexion */}
+                <div className="mt-3">
+                  <button
+                    onClick={async () => {
+                      try {
+                        setApiError(null)
+                        const testResponse = await fetch(`${apiUrl}/api/predict`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ data: ['Test de connexion', 'Test'] })
+                        })
+                        
+                        if (testResponse.ok) {
+                          alert('✅ Connexion à l\'API réussie !')
+                        } else {
+                          setApiError(`Test échoué: ${testResponse.status}`)
+                        }
+                      } catch (error) {
+                        setApiError(`Test de connexion échoué: ${error instanceof Error ? error.message : 'Erreur inconnue'}`)
+                      }
+                    }}
+                    className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md text-sm"
+                  >
+                    🧪 Tester la connexion
+                  </button>
+                </div>
+                
                 {apiError && (
                   <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                     <p className="text-red-800 text-sm">
